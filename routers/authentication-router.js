@@ -3,9 +3,11 @@ const router = require('express').Router();
 
 const authDB = require('../helper/authentication-helper.js')
 
-const bcrypt = require('bcryptjs')
+const bcrypt = require('bcryptjs') // Step 1
 
-router.get('/users', role('true') ,(req,res) => {
+const restricted = require('../restricted-middleware')
+
+router.get('/users', restricted ,(req,res) => {
     authDB
        .getUser()
        .then(user => {
@@ -21,8 +23,8 @@ router.get('/users', role('true') ,(req,res) => {
 
 router.post('/register', (req, res) => {
     let user = req.body;
-    const hash = bcrypt.hashSync(user.password, 4)
-    user.password = hash;
+    const hash = bcrypt.hashSync(user.password, 4) // Step 2
+    user.password = hash; // Step 3
 
     authDB
     .add(user)
@@ -30,19 +32,20 @@ router.post('/register', (req, res) => {
         res.status(201).json(saved)
     })
     .catch(error => {
-        res.status(500).json(error)
+        res.status(500).json({error})
     })
 })
 
 
 router.post('/login', (req, res) => {
-    let {username, password} = req.body;
+    let {username, password} = req.body; // Destructuring username and password
 
-    authDB
-    .getBy({username})
+    authDB // calling DB helper
+    .getBy({username}) //
     .then(user => {
-        if (user && bcrypt.compareSync(password, user.password)) {
-            res.status(200).json({ message: `Welcome ${user.username}` })
+        if (user && bcrypt.compareSync(password, user.password)) { // 
+            req.session.user = user;
+            res.status(200).json({ message: `Welcome ${user.username}` }) // 
         } else {
             res.status(401).json({ message: 'YOU SHALL NOT PASS' })
         }
@@ -51,6 +54,24 @@ router.post('/login', (req, res) => {
         res.status(500).json(error)
     })
 })
+
+
+
+router.get('/logout', (req, res) => {
+    if (req.session) {
+        req.session.destroy(err => {
+            if (err) {
+                res.status(500).json({ message: 'you can checkout any time you like but you can never leave' })
+            } else {
+                res.status(200).json({ message: "bye, thanks for visiting" })
+            }
+        })
+    } else {
+        res.status(200).json({ message: "bye, thanks for visiting" })
+    }
+})
+
+
 
 // function authenticate(req, res, next) {
 //     const {username, password} = req.headers;
@@ -74,9 +95,9 @@ router.post('/login', (req, res) => {
 //    }
 
 
-function role(loggedin) {
+function authorization(status) {
     return function(req, res, next) {
-      if(req.headers.loggedin === loggedin) {
+      if(req.headers.loggedin === status) {
         next()
       } else {
         res.status(403).json({message: 'YOU SHALL NOT PASS.'})
